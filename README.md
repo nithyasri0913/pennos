@@ -1,28 +1,26 @@
 # PennOS
 
-Our CIS 5480 (Fall '25) final project. PennOS is a small Unix-like OS that runs as a single process on the host. "Processes" are really spthreads that our own scheduler swaps in and out, and files live in PennFAT, a FAT-style filesystem stored inside one regular host file.
-
-Team 39: Kushal Garg, Nithyasri Srikumar, Seungju Lee, Xiaoyang Wan
+PennOS was developed as the final project for CIS 5480 (Fall 2025). It is a small Unix-like operating system that runs as a single process on the host. Each PennOS process is implemented as an spthread and is scheduled by a custom kernel scheduler. Files are stored in PennFAT, a FAT-style filesystem contained within a single host file.
 
 ## Building
 
-You'll need `clang-15`, which the course Docker container already has.
+`clang-15` is required (it is provided in the course Docker container).
 
 ```bash
 make            # builds bin/pennfat and bin/pennos
-make pennfat    # just pennfat (also drops a ./pennfat symlink)
+make pennfat    # builds pennfat only and creates a ./pennfat symlink
 make tests      # builds bin/test_p_errno
 make clean
-make format     # clang-format, Chromium style
+make format     # runs clang-format (Chromium style)
 ```
 
-Warnings are errors (`-Werror`), so the build fails if anything new throws a warning.
+All warnings are treated as errors (`-Werror`).
 
 ## Running
 
 ### PennFAT (standalone)
 
-You can use this to create and poke at a filesystem without the kernel running.
+PennFAT can be run on its own to create and inspect a filesystem without the kernel.
 
 ```
 $ ./bin/pennfat
@@ -35,7 +33,7 @@ pennfat> ls
 pennfat> unmount
 ```
 
-It also supports `cat`, `mv`, `rm`, `chmod` and `print_fat`. There are a bunch of `test_*` commands in [src/pennfat.c](src/pennfat.c) that we used while building the k-level functions. They're still in there in case they're useful.
+`cat`, `mv`, `rm`, `chmod` and `print_fat` are also supported. Several `test_*` commands used during development of the k-level functions are kept in [src/pennfat.c](src/pennfat.c).
 
 ### PennOS
 
@@ -43,39 +41,39 @@ It also supports `cat`, `mv`, `rm`, `chmod` and `print_fat`. There are a bunch o
 ./bin/pennos myfs
 ```
 
-Pass it a filesystem you made with `pennfat`. If you leave it off, it still boots, but the file commands won't have anything to work with. Scheduler events get logged to `log/log`.
+A filesystem created with `pennfat` should be passed as the argument. If none is given, the system still boots, but file commands are unavailable. Scheduler events are logged to `log/log`.
 
-Once you're in the shell, type `help` to see everything. The main ones:
+A full list of shell commands is printed by `help`. The main commands are:
 
 - **Processes:** `ps`, `kill [-term|-stop|-cont] pid`, `nice <prio> <cmd>`, `nice_pid <prio> <pid>`, `sleep`, `busy`
-- **Job control:** `&` for background, `jobs`, `fg`, `bg`, Ctrl-C / Ctrl-Z
+- **Job control:** `&` (background), `jobs`, `fg`, `bg`, Ctrl-C, Ctrl-Z
 - **Files:** `ls`, `cat`, `echo`, `touch`, `mv`, `cp`, `rm`, `chmod`
-- **Redirection:** `<`, `>` and `>>` all work
-- **Scripts:** if a file in PennFAT is executable (`chmod +x`), you can run it by name and it'll run each line as a command
-- **Test stuff:** `zombify`, `orphanify`, `hang`, `nohang`, `recur`, `crash`
-- `logout` shuts the OS down cleanly
+- **Redirection:** `<`, `>` and `>>`
+- **Scripts:** executable files in PennFAT (`chmod +x`) can be run by name, and each line is executed as a command
+- **Testing:** `zombify`, `orphanify`, `hang`, `nohang`, `recur`, `crash`
+- **Shutdown:** `logout`
 
-## How it's laid out
+## Project Structure
 
 ```
 src/
-  pennos.c        boots the kernel, creates INIT, starts the scheduler
+  pennos.c        kernel boot, INIT creation, scheduler startup
   pennfat.c       standalone filesystem shell
   kernel/         PCBs, scheduler, syscalls (s_*), shell, init, logging, p_errno
   FAT/            mkfs/mount, k_* file functions, s_* wrappers, fd table, shell commands
   parser/         command line parser (provided)
   utils/          spthread, Vec, redirection, panic helpers
-tests/            stress tests + p_errno tests
-doc/              companion document + course readme
+tests/            stress tests and p_errno tests
+doc/              companion document and course readme
 ```
 
-We split things up the way the spec asks: user programs call `s_*` functions, and those call the `k_*` ones. User code never reaches into the kernel directly.
+User programs call only `s_*` functions, which in turn call the `k_*` kernel functions. Kernel state is never accessed directly by user code.
 
-### A few notes
+### Design Notes
 
-- **Scheduler:** three priority levels (0, 1, 2), driven by a `SIGALRM` timer with a 100ms quantum. Higher-priority queues get picked more often, but lower ones still get time, so nothing starves.
-- **INIT** is PID 1. It spawns the shell and reaps any orphans that get handed to it.
-- **FAT layout:** FAT[0] stores the FAT size and block size config, and block 1 is always the root directory. `0x0000` means a free block and `0xFFFF` marks the end of a chain.
-- **Errors:** each PCB has its own `p_errno`. Syscalls set it and return -1, and `u_perror()` prints the message, basically like `errno`/`perror`.
+- **Scheduler:** Three priority levels (0, 1, 2) are used, driven by a `SIGALRM` timer with a 100 ms quantum. Higher-priority queues are selected more often, but lower-priority queues are still guaranteed time, so starvation is prevented.
+- **INIT:** INIT is created as PID 1. The shell is spawned by INIT, and orphaned processes are reparented to INIT and reaped by it.
+- **FAT layout:** The FAT size and block size configuration are stored in FAT[0], and block 1 is reserved for the root directory. Free blocks are marked `0x0000` and the end of a chain is marked `0xFFFF`.
+- **Errors:** A `p_errno` value is stored in each PCB. On failure, it is set by the syscall and -1 is returned; the message is printed by `u_perror()`, similar to `errno`/`perror`.
 
-The [companion doc](doc/PennOS_Companion_Document.pdf) goes into much more detail (PCB fields, signals, design decisions, etc.).
+Further detail (PCB fields, signals, design decisions) is provided in the [companion document](doc/PennOS_Companion_Document.pdf).
