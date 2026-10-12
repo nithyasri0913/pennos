@@ -1,0 +1,11 @@
+.DS_Store
+*.o
+.settings.json
+.vscode/
+log/log
+minfs
+maxfs
+demo9
+demo2copy
+demo2
+demo3
